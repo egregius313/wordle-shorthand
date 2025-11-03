@@ -7,7 +7,7 @@
 ;; Created: November 03, 2025
 ;; Modified: November 03, 2025
 ;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
+;; Keywords: games
 ;; Homepage: https://github.com/egregius313/wordle-shorthand
 ;; Package-Requires: ((emacs "24.3"))
 ;;
