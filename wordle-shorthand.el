@@ -54,7 +54,7 @@
     (let* ((current-line (thing-at-point 'line t))
            (matches (s-match-strings-all wordle-shorthand--line-pattern current-line)))
       (if (not (is-line matches))
-          (cl-return))
+          (cl-return-from 'wordle-shorthand--expand-line))
       (beginning-of-line)
       (kill-line)
       (when (is-winning current-line)
