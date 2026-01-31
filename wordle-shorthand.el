@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: games
 ;; Homepage: https://github.com/egregius313/wordle-shorthand
-;; Package-Requires: ((emacs "24.3"))
+;; Package-Requires: ((emacs "27.1") (org-ml "6.0.2") (org "9.7") (dash "2.17") (s "1.12"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -21,14 +21,15 @@
 
 (eval-when-compile
   (require 'cl-lib)
-  (require 'dash)
   (require 'rx))
 (require 'org)
+(require 'dash)
 (require 's)
+(require 'org-ml)
 (require 'thingatpt)
 
 (defgroup wordle-shorthand nil
-  "Wordle Shorthand mode"
+  "Wordle Shorthand mode."
   :group 'games)
 
 (defconst wordle-shorthand--line-pattern
@@ -43,41 +44,51 @@
   (rx ?* (= 5 alpha) ?*) ; *abcde*
   "Pattern for recognizing when a line indicates winning.")
 
-(cl-defun wordle-shorthand--expand-line ()
-  (interactive)
-  (cl-flet ((is-line (matches)
-              (= 5 (cl-loop for (_ _ letters) in matches sum (length letters))))
-            (is-winning (line)
-              (->> line
-                   s-trim
-                   (s-match wordle-shorthand--winning-line-pattern))))
-    (let* ((current-line (thing-at-point 'line t))
-           (matches (s-match-strings-all wordle-shorthand--line-pattern current-line)))
-      (if (not (is-line matches))
-          (cl-return-from 'wordle-shorthand--expand-line))
-      (beginning-of-line)
-      (kill-line)
-      (when (is-winning current-line)
-        (insert "|-----+-----+-----+-----+-----|\n"))
-      (apply #'insert
-             (cons "|"
-                   (cl-loop
-                    for (_ kind letters) in matches
-                    append (cl-loop for c across letters
-                                    append (list " " kind c kind " |"))))))))
+(defun wordle-shorthand--expand-game-replacer ()
+  "Argument to `replace-region-contents' for `wordle-shorthand-expand-game'."
+  (cl-loop
+   with paragraph = (thing-at-point 'paragraph t)
+   with lines = (->> paragraph s-lines (-remove 's-blank-p))
+   with table-rows
+
+   for line in lines
+   for matches = (s-match-strings-all wordle-shorthand--line-pattern line)
+
+   ;; Check for the winning line
+   for is-winning = (->> line
+                         s-trim
+                         (s-match wordle-shorthand--winning-line-pattern))
+   when is-winning
+   collect 'hline into table-rows
+
+   for expanded-line = (cl-loop
+                        for (_ kind letters) in matches
+                        append (cl-loop for c across letters
+                                        for cell = (concat kind (list c) kind)
+                                        collect cell))
+     
+   collect expanded-line into table-rows
+   
+   finally return (concat
+                   "\n"
+                   (->> table-rows
+                        (apply 'org-ml-build-table!)
+                        (org-ml-build-special-block "wordle")
+                        (org-ml-build-section)
+                        (org-ml-build-headline! :title-text "Wordle" :tags '("wordle"))
+                        org-ml-to-string)
+                   "\n")))
 
 (defun wordle-shorthand-expand-game ()
   (interactive)
-  (let ((line-count (->> (thing-at-point 'paragraph t)
-                         s-lines
-                         length)))
-    (org-backward-element)
-    (insert "* Wordle :wordle:\n\n")
-    (insert "#+begin_wordle\n")
-    (dotimes (_ line-count)
-      (wordle-shorthand--expand-line)
-      (forward-line))
-    (insert "\n#+end_wordle\n")))
+  (let* ((bounds (bounds-of-thing-at-point 'paragraph))
+         (beg (car bounds))
+         (end (cdr bounds)))
+    (replace-region-contents beg end 'wordle-shorthand--expand-game-replacer))
+  (let* ((element (org-element-at-point))
+         (end (org-element-property :end element)))
+    (goto-char end)
+    (forward-line 1)))
 
 (define-minor-mode wordle-shorthand-mode
   "Minor mode to allow expanding wordle shorthand in `org-roam-dailies' files."
